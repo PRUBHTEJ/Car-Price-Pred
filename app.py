@@ -1,61 +1,62 @@
-import streamlit as st
+from flask import Flask, render_template, request
+import jsonify
+import requests
 import pickle
-model = pickle.load(open('RF_price_predicting_model.pkl','rb'))
+import numpy as np
+import sklearn
+from sklearn.preprocessing import StandardScaler
+app = Flask(__name__)
+file = 'random_forest_car_prediction_mode.pkl'
+with open(file, 'rb') as f:
+    model = pickle.load(f)
+# model = pickle.load(open(, 'rb'))
 
-def main():
-    string = "Car Price Predictor"
-    st.set_page_config(page_title=string, page_icon="🚗") 
-    st.title("Car Price Predictor 🚗")
-    st.markdown("##### Are you planning to sell your car !?\n##### So let's try evaluating the price.. 🤖 ")
-    st.image(
-            "https://imgd.aeplcdn.com/0x0/n/cw/ec/27032/s60-exterior-right-front-three-quarter-3.jpeg",
-            width=400, # Manually Adjust the width of the image as per requirement
-        )
-    st.write('')
-    st.write('')
-    years = st.number_input('In which year car was purchased ?',1990, 2021, step=1, key ='year')
-    Years_old = 2021-years
 
-    Present_Price = st.number_input('What is the current ex-showroom price of the car ?  (In ₹lakhs)', 0.00, 50.00, step=0.5, key ='present_price')
+@app.route('/', methods=['GET'])
+def Home():
+    return render_template('index.html')
 
-    Kms_Driven = st.number_input('What is distance completed by the car in Kilometers ?', 0.00, 500000.00, step=500.00, key ='drived')
 
-    Owner = st.radio("The number of owners the car had previously ?", (0, 1, 3), key='owner')
+standard_to = StandardScaler()
 
-    Fuel_Type_Petrol = st.selectbox('What is the fuel type of the car ?',('Petrol','Diesel', 'CNG'), key='fuel')
-    if(Fuel_Type_Petrol=='Petrol'):
-        Fuel_Type_Petrol=1
-        Fuel_Type_Diesel=0
-    elif(Fuel_Type_Petrol=='Diesel'):
-        Fuel_Type_Petrol=0
-        Fuel_Type_Diesel=1
+
+@app.route("/predict", methods=['POST'])
+def predict():
+    Fuel_Type_Diesel = 0
+    if request.method == 'POST':
+        Year = int(request.form['Year'])
+        Present_Price = float(request.form['Present_Price']) * 73.78 /100000
+        Kms_Driven = int(request.form['Kms_Driven'])
+        Kms_Driven2 = np.log(Kms_Driven)
+        Owner = int(request.form['Owner'])
+        Fuel_Type_Petrol = request.form['Fuel_Type_Petrol']
+        if(Fuel_Type_Petrol == 'Petrol'):
+            Fuel_Type_Petrol = 1
+            Fuel_Type_Diesel = 0
+        else:
+            Fuel_Type_Petrol = 0
+            Fuel_Type_Diesel = 1
+        Year = 2020-Year
+        Seller_Type_Individual = request.form['Seller_Type_Individual']
+        if(Seller_Type_Individual == 'Individual'):
+            Seller_Type_Individual = 1
+        else:
+            Seller_Type_Individual = 0
+        Transmission_Mannual = request.form['Transmission_Mannual']
+        if(Transmission_Mannual == 'Mannual'):
+            Transmission_Mannual = 1
+        else:
+            Transmission_Mannual = 0
+        prediction = model.predict([[Present_Price, Kms_Driven2, Owner, Year, Fuel_Type_Diesel,
+                                     Fuel_Type_Petrol, Seller_Type_Individual, Transmission_Mannual]])
+        output = round(prediction[0], 2)
+        if output < 0:
+            return render_template('index.html', prediction_texts="Sorry you cannot sell this car")
+        else:
+            return render_template('index.html', prediction_text="You Can Sell The Car at {:.3f} dollars".format((output * 100000)/73.78))
     else:
-        Fuel_Type_Petrol=0
-        Fuel_Type_Diesel=0
+        return render_template('index.html')
 
-    Seller_Type_Individual = st.selectbox('Are you a dealer or an individual ?', ('Dealer','Individual'), key='dealer')
-    if(Seller_Type_Individual=='Individual'):
-        Seller_Type_Individual=1
-    else:
-        Seller_Type_Individual=0	
 
-    Transmission_Mannual = st.selectbox('What is the Transmission Type ?', ('Manual','Automatic'), key='manual')
-    if(Transmission_Mannual=='Mannual'):
-        Transmission_Mannual=1
-    else:
-        Transmission_Mannual=0
-
-    if st.button("Estimate Price", key='predict'):
-        try:
-            Model = model  #get_model()
-            prediction = Model.predict([[Present_Price, Kms_Driven, Owner, Years_old, Fuel_Type_Diesel, Fuel_Type_Petrol, Seller_Type_Individual, Transmission_Mannual]])
-            output = round(prediction[0],2)
-            if output<0:
-                st.warning("You will be not able to sell this car !!")
-            else:
-                st.success("You can sell the car for {} lakhs 🙌".format(output))
-        except:
-            st.warning("Opps!! Something went wrong\nTry again")
-
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    app.run(debug=True)
